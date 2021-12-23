@@ -1,15 +1,25 @@
+#include <Wire.h>
+#include <Adafruit_MPR121.h>
 #include <GyverTimer.h>
 #include <FastLED.h>
+#ifndef _BV
+#define _BV(bit) (1 << (bit))
+#endif
+uint16_t lasttouched = 0;
+uint16_t currtouched = 0;
+int LR[] = {0, 0, 0, 0};
 GTimer myTimer(MS);
+Adafruit_MPR121 cap = Adafruit_MPR121();
 CRGBArray<20> leds;
 bool id[9];
 //bool id2[9];
 bool id3[3];
 bool point2;
 byte s = 0;
-int LR[1];
-int tic[1];
+int bruh;
+int bruh2;
 unsigned long time1 = 0;
+unsigned long time2[3];
 #define bright 120
 #define L1 7
 #define L2 6
@@ -18,18 +28,18 @@ unsigned long time1 = 0;
 #define leddelay 0
 #define colorcof 4
 #define huedelay 33
-const byte butstep = 2;
+#define butstep 1
 void setup() {
+  cap.begin(0x5A);
   myTimer.setInterval(huedelay);
-  for (byte a = 18; a > 13; a--) pinMode(a, INPUT_PULLUP);
   for (byte a = 11; a > 7; a--) pinMode(a, INPUT_PULLUP);
   for (byte d = 2; d < 8; d++) {
-    //pinMode(d, OUTPUT);
+    pinMode(d, OUTPUT);
     digitalWrite(d, HIGH);
   }
-
-  Serial.begin(115200);
-  FastLED.addLeds<NEOPIXEL, 12>(leds, 20);
+  for (byte a = 0; a < 10; a++) id[a] = false;
+  Serial.begin(9600);
+  FastLED.addLeds<NEOPIXEL, 13>(leds, 20);
 }
 void loop() {
   if (millis() - 7000 < time1) {
@@ -38,52 +48,37 @@ void loop() {
     fadergb();
   }
 }
-void pointtosens(bool stat) {
-  if(stat) idsens(true);
-  else idsens(false);
+void pointtosens() {
+  idsens();
   static  byte hue = 0;
   if (myTimer.isReady()) hue++;
-  //Serial.print("pointtosens: ");
+  leds[18] = CHSV(0, 0, 0);
+  leds[19] = CHSV(0, 0, 0);
   for (int rus = 9; rus >= 0; rus--) {
     //Serial.println(k);
-    if (id[rus] == true) {
-      //if(k == 9) Serial.println(id[k]);
+    if (id[rus]) {
       s = rus * 2;
-      if (stat) id[rus] = false;
       leds[s] = CHSV(hue, 255, bright);
       leds[s + 1] = CHSV(hue, 255, bright);
-      //Serial.println(s);
     }
   }
   FastLED.show();
   FastLED.clear();
 }
-void idsens(bool stat) {
-  //Serial.print("idsens: ");
-  for (int stat = 1; stat >= 0; stat--) {
-    if (stat == 1) {
-      digitalWrite(2, HIGH);
-      digitalWrite(3, LOW);
+void idsens() {
+  currtouched = cap.touched();
+  for (byte a = 0; a < 12; a++) {
+    if ((currtouched & _BV(a)) && !(lasttouched & _BV(a)) ) {
+      id[a] = true;
+      time1 = millis();
     }
-    if (stat == 0) {
-      digitalWrite(2, LOW);
-      digitalWrite(3, HIGH);
-    }
-    for (byte a = 18; a > 13; a--) {
-      if (digitalRead(a) == false) {
-        id[a - 14 + 5 * stat] = true;
-
-        //id2[a - 14 + 5 * stat] = true;
-        //if(s == 9) Serial.println("true");
-        time1 = millis();
-        //Serial.println(s);
-      }
+    if (!(currtouched & _BV(a)) && (lasttouched & _BV(a)) ) {
+      id[a] = false;
     }
   }
-  if(stat) ticchek(false);
+  lasttouched = currtouched;
 }
 void fadergb() {
-  idsens(false);
   for (byte a = 8; a < 12; a ++) {
     if (digitalRead(a) == false) id3[a - 8] = true;
   }
@@ -105,50 +100,49 @@ void fadergb() {
   for (byte a = 0; a < 4; a++) id3[a] = false;
 }
 void output() {
-  pointtosens(false);
-  ticchek(true);
-  for (byte i = 0; i < 10; i++) id[i] = false;
-  pointtosens(true);
-  if (LR[0] != tic[0]) {
-    if (tic[0] < LR[0]) {
-      digitalWrite(R1, LOW);
-      Serial.println("R1 true");
-    }
-    else digitalWrite(R1, HIGH);
-    if (tic[0] > LR[0]) {
-      digitalWrite(L1, LOW);
-      Serial.println("L1 true");
-    }
-    else digitalWrite(L1, HIGH);
-  }
-  if (LR[1] != tic[1] && point2 == true) {
-    if (tic[1] < LR[1]) {
-      digitalWrite(R2, LOW);
-      Serial.println("R2 true");
-    }
-    else digitalWrite(R2, HIGH);
-    if (tic[1] > LR[1]) {
-      digitalWrite(L2, LOW);
-      Serial.println("L2 true");
-    }
-    else digitalWrite(L2, HIGH);
-    point2 = false;
-  }
-}
-void ticchek(bool stat) {
-  for (tic[0] = 0; tic[0] < 10; tic[0]++) {
-    if (id[tic[0]]) {
-      if (stat) LR[0] = tic[0];
-      Serial.println(tic[0]);
+  pointtosens();
+  for (bruh = 0; bruh < 10; bruh++) {
+    if (id[bruh]) {
+      LR[0] = bruh;
       break;
     }
   }
-  for (tic[1] = tic[0] + butstep; tic[1] < 10; tic[1]++) {
-    point2 = true;
-    if (id[tic[1]]) {
-      if (stat) LR[1] = tic[1];
-      Serial.println(tic[1]);
+  for (bruh2 = bruh + butstep; bruh2 < 10; bruh2++) {
+    if (id[bruh2]) {
+      LR[1] = bruh2;
       break;
     }
+  }
+  pointtosens();
+  for (bruh = 0; bruh < 10; bruh++) {
+    if (id[bruh]) {
+      LR[2] = bruh;
+      break;
+    }
+  }
+  for (bruh2 = bruh + butstep; bruh2 < 10; bruh2++) {
+    if (id[bruh2]) {
+      LR[3] = bruh2;
+      break;
+    }
+  }
+  if (LR[2] > LR[0]) {
+    time2[0] = millis();
+    digitalWrite(L1, LOW);
+  }
+  if (LR[3] > LR[1]) {
+    time2[1] = millis();
+    digitalWrite(L2, LOW);
+  }
+  if (LR[2] < LR[0]) {
+    time2[2] = millis();
+    digitalWrite(R1, LOW);
+  }
+  if (LR[3] < LR[1]) {
+    time2[3] = millis();
+    digitalWrite(R2, LOW);
+  }
+  for (int a = 0; a < 4; a++) {
+    if (millis() - 50 >= time2[a]) digitalWrite(7 - a, HIGH);
   }
 }
